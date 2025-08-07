@@ -1,0 +1,30 @@
+{
+  "name": "universal-http-ping-service",
+  "version": "1.0.0",
+  "description": "Universal HTTP ping service for sending periodic HTTP requests to multiple endpoints",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "http",
+    "ping",
+    "monitoring",
+    "scheduler",
+    "nodejs",
+    "cron"
+  ],
+  "author": "kamilcollu",
+  "license": "MIT",
+  "dependencies": {
+    "cron": "^3.1.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kamilcollu/universal-http-ping-service.git"
+  }
+}

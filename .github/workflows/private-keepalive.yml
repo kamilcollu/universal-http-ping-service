@@ -1,0 +1,153 @@
+name: Private HTTP Ping Service
+
+on:
+  schedule:
+    # Run every 5 minutes (GitHub's minimum supported interval)
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  http-ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Execute HTTP ping requests
+        env:
+          WEBSITE_URLS: ${{ secrets.WEBSITE_URLS }}
+        run: |
+          echo "🚀 Private HTTP ping service starting..."
+          echo "📅 $(date)"
+
+          # Count websites without revealing them
+          SITE_COUNT=$(echo $WEBSITE_URLS | tr ',' '\n' | wc -l)
+          echo "🎯 Monitoring $SITE_COUNT configured endpoints"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Create ultra-private ping script
+          cat > private-ping.js << 'EOF'
+          const https = require('https');
+          const http = require('http');
+          const { URL } = require('url');
+
+          const websites = process.env.WEBSITE_URLS ? process.env.WEBSITE_URLS.split(',').map(url => url.trim()) : [];
+
+          async function privatePing(url, index) {
+            return new Promise((resolve, reject) => {
+              const startTime = Date.now();
+
+              try {
+                const parsedUrl = new URL(url);
+                const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+                const options = {
+                  hostname: parsedUrl.hostname,
+                  port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+                  path: parsedUrl.pathname + parsedUrl.search,
+                  method: 'GET',
+                  timeout: 60000,
+                  headers: {
+                    'User-Agent': 'Universal-HTTP-Ping-Service/1.0',
+                    'Accept': '*/*',
+                    'Connection': 'close'
+                  }
+                };
+
+                const req = protocol.get(options, (res) => {
+                  const responseTime = Date.now() - startTime;
+
+                  res.on('data', () => {});
+                  res.on('end', () => {});
+
+                  if (res.statusCode >= 200 && res.statusCode < 400) {
+                    console.log(`✅ Endpoint ${index + 1}: OK (${res.statusCode}) - ${responseTime}ms`);
+                    resolve({ index, success: true, statusCode: res.statusCode, responseTime });
+                  } else if (res.statusCode === 404) {
+                    console.log(`⚠️ Endpoint ${index + 1}: Awake (404) - ${responseTime}ms`);
+                    resolve({ index, success: true, statusCode: res.statusCode, responseTime });
+                  } else {
+                    console.log(`⚠️ Endpoint ${index + 1}: Status ${res.statusCode} - ${responseTime}ms`);
+                    resolve({ index, success: false, statusCode: res.statusCode, responseTime });
+                  }
+                });
+
+                req.on('timeout', () => {
+                  console.log(`⏰ Endpoint ${index + 1}: Timeout (60s)`);
+                  req.destroy();
+                  reject({ index, error: 'Timeout' });
+                });
+
+                req.on('error', (e) => {
+                  console.log(`❌ Endpoint ${index + 1}: Connection failed`);
+                  reject({ index, error: 'Connection failed' });
+                });
+
+                req.setTimeout(60000);
+              } catch (error) {
+                console.log(`❌ Endpoint ${index + 1}: Invalid configuration`);
+                reject({ index, error: 'Invalid configuration' });
+              }
+            });
+          }
+
+          async function executePrivatePings() {
+            if (!websites.length) {
+              console.log('❌ No endpoints configured');
+              process.exit(1);
+            }
+
+            console.log(`🔄 Processing ${websites.length} endpoints...`);
+
+            const results = [];
+
+            for (let i = 0; i < websites.length; i++) {
+              try {
+                const result = await privatePing(websites[i], i);
+                results.push(result);
+              } catch (error) {
+                results.push(error);
+              }
+
+              // Delay between requests
+              if (i < websites.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+              }
+            }
+
+            const successful = results.filter(r => r.success).length;
+            const failed = results.length - successful;
+            const avgTime = results
+              .filter(r => r.responseTime)
+              .reduce((sum, r) => sum + r.responseTime, 0) / Math.max(results.filter(r => r.responseTime).length, 1);
+
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log(`📊 Results: ${successful}/${results.length} endpoints responsive`);
+            console.log(`⏱️  Average response: ${Math.round(avgTime)}ms`);
+            console.log(`🎯 Ping status: ${failed === 0 ? 'All endpoints responding' : 'Some endpoints failed'}`);
+
+            return { successful, failed, total: results.length };
+          }
+
+          executePrivatePings().catch(error => {
+            console.log('💥 HTTP ping execution failed');
+            process.exit(1);
+          });
+          EOF
+
+          # Execute the private ping script
+          node private-ping.js
+
+      - name: Service completed
+        run: |
+          echo "✨ HTTP ping service cycle completed"
+          echo "⏰ Next cycle: 5 minutes"
